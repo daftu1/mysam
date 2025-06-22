@@ -213,4 +213,4 @@ cd data_generation && streamlit run streamlit_app_enhanced.py --server.port 8501
 cd training_models && python run_training.py
 ```
 
-**🎯 开始你的AI视觉之旅吧！** 
+**🎯 开始你的AI视觉之旅吧！**
