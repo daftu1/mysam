@@ -111,4 +111,10 @@ yolo11*.pt
 # 临时视频和图片目录
 temp_video_*
 segmented_video_*
-yolo_sam2_output_* 
+yolo_sam2_output_*
+
+# 但是保留安装和启动脚本
+!setup.sh
+!setup.bat
+!start_ui.sh
+!start_ui.bat 
