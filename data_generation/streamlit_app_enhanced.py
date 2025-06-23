@@ -17,6 +17,24 @@ from torchvision.ops import masks_to_boxes
 from sam2.build_sam import build_sam2_video_predictor
 from streamlit_image_coordinates import streamlit_image_coordinates
 
+# 智能设备检测函数
+def get_device():
+    """智能检测最佳可用设备：MPS > CUDA > CPU"""
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return torch.device("mps")
+    elif torch.cuda.is_available():
+        return torch.device("cuda")
+    else:
+        return torch.device("cpu")
+
+def get_autocast_device():
+    """获取用于autocast的设备类型字符串"""
+    device = get_device()
+    if device.type == "mps":
+        return "cpu"  # MPS在autocast中使用cpu模式
+    else:
+        return device.type
+
 # 边界框生成函数
 def get_tight_bbox(mask):
     """
@@ -107,9 +125,23 @@ def get_bbox_by_method(mask, method="轮廓边界框"):
 # 初始化模型
 @st.cache_resource
 def load_sam2_model():
-    checkpoint = os.path.join(os.path.expanduser("~"), "sam2", "checkpoints", "sam2.1_hiera_base_plus.pt")
+    checkpoint = os.path.join(os.path.expanduser("~"), "mysam", "sam2", "checkpoints", "sam2.1_hiera_base_plus.pt")
     model_cfg = "configs/sam2.1/sam2.1_hiera_b+.yaml"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # 智能设备检测：优先使用MPS加速 (Apple Silicon)，然后CUDA，最后CPU
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("🚀 使用Apple Silicon MPS加速")
+        st.success("🚀 正在使用Apple Silicon MPS加速")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+        print("🚀 使用CUDA GPU加速")
+        st.success("🚀 正在使用CUDA GPU加速")
+    else:
+        device = torch.device("cpu")
+        print("💻 使用CPU处理")
+        st.info("💻 正在使用CPU处理")
+    
     return build_sam2_video_predictor(model_cfg, checkpoint, device=device, vos_optimized=True)
 
 sam2_model = load_sam2_model()
@@ -354,11 +386,14 @@ if current_session_id and segment_path:
                     st.write(f"🔍 点标签: {lbls}")
                     
                     try:
-                        # 清理GPU内存
-                        if torch.cuda.is_available():
+                        # 清理GPU/MPS内存
+                        device = get_device()
+                        if device.type == "cuda":
                             torch.cuda.empty_cache()
+                        elif device.type == "mps":
+                            torch.mps.empty_cache()
                         
-                        with torch.autocast("cuda" if torch.cuda.is_available() else "cpu"):
+                        with torch.autocast(get_autocast_device()):
                             # 限制视频长度为100帧来节省内存
                             temp_video_path = f"temp_video_100frames_{current_session_id}.mp4"
                             if not os.path.exists(temp_video_path):
@@ -400,10 +435,12 @@ if current_session_id and segment_path:
                             binary_mask = (mask_logits[0] > 0).cpu().numpy().squeeze()
                             st.write(f"🔍 掩码统计: 形状={binary_mask.shape}, 前景像素={binary_mask.sum()}")
                             
-                            # 立即清理GPU内存
+                            # 立即清理GPU/MPS内存
                             del mask_logits
-                            if torch.cuda.is_available():
+                            if device.type == "cuda":
                                 torch.cuda.empty_cache()
+                            elif device.type == "mps":
+                                torch.mps.empty_cache()
                             
                             if binary_mask.sum() > 0:
                                 # 使用用户选择的边界框算法，传统方法效果最好
@@ -464,11 +501,14 @@ if current_session_id and segment_path:
                 else:
                     with st.spinner("正在生成100帧掩码..."):
                         try:
-                            # 清理GPU内存
-                            if torch.cuda.is_available():
+                            # 清理GPU/MPS内存
+                            device = get_device()
+                            if device.type == "cuda":
                                 torch.cuda.empty_cache()
+                            elif device.type == "mps":
+                                torch.mps.empty_cache()
                                 
-                            with torch.autocast("cuda" if torch.cuda.is_available() else "cpu"):
+                            with torch.autocast(get_autocast_device()):
                                 # 使用帧目录，就像GPU.py中一样
                                 inference_state = sam2_model.init_state(video_path=FRAME_DIR)
                                 pts = [[p[0], p[1]] for p in ref_points]
@@ -493,9 +533,11 @@ if current_session_id and segment_path:
                                         obj_id: (mask_logits[j] > 0).cpu().numpy()
                                         for j, obj_id in enumerate(obj_ids)
                                     }
-                                    # 立即清理每帧的GPU内存
-                                    if torch.cuda.is_available():
+                                    # 立即清理每帧的GPU/MPS内存
+                                    if device.type == "cuda":
                                         torch.cuda.empty_cache()
+                                    elif device.type == "mps":
+                                        torch.mps.empty_cache()
                                     # 限制只处理前100帧
                                     if i >= 99:
                                         break
@@ -713,7 +755,7 @@ if current_session_id and segment_path:
                     refine_points = st.session_state.get("refine_points", [])
                     if refine_points:
                         with st.spinner("正在应用修正并重新传播..."):
-                            with torch.autocast("cuda" if torch.cuda.is_available() else "cpu"):
+                            with torch.autocast(get_autocast_device()):
                                 inference_state = st.session_state["inference_state"]
                                 pts = [[p[0], p[1]] for p in refine_points]
                                 lbls = [p[2] for p in refine_points]
@@ -754,10 +796,16 @@ with st.sidebar:
     st.header("📊 当前状态")
     if current_session_id:
         st.write(f"会话ID: {current_session_id}")
-        st.write(f"设备: {'GPU' if torch.cuda.is_available() else 'CPU'}")
+        device = get_device()
+        if device.type == "mps":
+            st.write("设备: 🚀 Apple Silicon MPS")
+        elif device.type == "cuda":
+            st.write("设备: 🚀 CUDA GPU")
+        else:
+            st.write("设备: 💻 CPU")
         
         # GPU内存监控
-        if torch.cuda.is_available():
+        if device.type == "cuda":
             gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
             gpu_allocated = torch.cuda.memory_allocated(0) / 1024**3
             gpu_cached = torch.cuda.memory_reserved(0) / 1024**3
@@ -768,6 +816,13 @@ with st.sidebar:
             if st.button("🧹 清理GPU内存"):
                 torch.cuda.empty_cache()
                 st.success("✅ GPU内存已清理")
+                st.rerun()
+        
+        # MPS内存监控（Apple Silicon）
+        elif device.type == "mps":
+            if st.button("🧹 清理MPS内存"):
+                torch.mps.empty_cache()
+                st.success("✅ MPS内存已清理")
                 st.rerun()
         
         if "video_segments" in st.session_state:

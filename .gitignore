@@ -117,4 +117,12 @@ yolo_sam2_output_*
 !setup.sh
 !setup.bat
 !start_ui.sh
-!start_ui.bat 
+!start_ui.bat # Mac版本临时文件和模型目录
+sam2/
+*.bak
+data_generation/temp_*.mp4
+data_generation/frame_cache_*/
+data_generation/video_segments/
+data_generation/frames_*/
+data_generation/labels_*/
+**/.DS_Store

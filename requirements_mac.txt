@@ -1,0 +1,56 @@
+# DATASAM2GET项目Mac版本依赖包
+# Python 3.8+ 兼容
+
+# 深度学习框架 (CPU版本)
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# YOLO和目标检测
+ultralytics>=8.0.0
+
+# Web UI框架
+streamlit>=1.25.0
+streamlit-image-coordinates>=0.1.6
+
+# 计算机视觉和图像处理
+opencv-python>=4.5.0
+Pillow>=8.3.0
+matplotlib>=3.3.0
+seaborn>=0.11.0
+
+# 数据处理
+numpy>=1.21.0
+pandas>=1.3.0
+scipy>=1.7.0
+
+# 视频处理
+moviepy>=1.0.3
+
+# GUI支持 (Mac兼容)
+PyQt5>=5.15.0
+
+# 工具包
+PyYAML>=6.0
+tqdm>=4.62.0
+pathlib2  # Python < 3.8 兼容
+
+# 模型导出和优化
+onnx>=1.12.0
+onnxruntime>=1.12.0
+
+# 监控和可视化
+tensorboard>=2.8.0
+
+# 开发和调试工具
+ipython
+jupyter
+
+# Mac特定优化
+# 确保使用CPU版本的PyTorch
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# 注意：
+# 1. SAM2需要从GitHub单独安装: git clone https://github.com/facebookresearch/segment-anything-2.git
+# 2. Mac版本使用CPU处理，速度相对较慢但功能完整
+# 3. 如果有Apple Silicon (M1/M2/M3)，可以利用MPS加速 
